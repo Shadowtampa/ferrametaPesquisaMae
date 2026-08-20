@@ -3,3 +3,4 @@ client/dist/
 server/data/*.csv
 .DS_Store
 *.log
+.vercel
