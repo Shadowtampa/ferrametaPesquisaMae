@@ -1,19 +1,11 @@
-const fs = require('fs');
-const path = require('path');
 const { parseCSV, rowsToObjects, toCSV } = require('./csv');
+const storage = require('./storage');
 
-const DATA_DIR = path.join(__dirname, 'data');
-const CSV_PATH = path.join(DATA_DIR, 'servidores.csv');
 const HEADERS = ['id', 'cargo', 'setor', 'classificacao_setor', 'created_at', 'updated_at'];
 const CLASSIFICACOES = ['UNIDADE_ACADEMICA', 'UNIDADE_ADMINISTRATIVA', 'NAO_SEI'];
 
 class ValidationError extends Error {}
 class NotFoundError extends Error {}
-
-function ensureFile() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(CSV_PATH)) fs.writeFileSync(CSV_PATH, `${HEADERS.join(',')}\r\n`);
-}
 
 function normalizeClassificacao(value) {
   return CLASSIFICACOES.includes(value) ? value : 'NAO_SEI';
@@ -27,9 +19,9 @@ function mapClassificacaoLabel(raw) {
   return 'NAO_SEI';
 }
 
-function readRaw() {
-  ensureFile();
-  const text = fs.readFileSync(CSV_PATH, 'utf8');
+async function readRaw() {
+  const text = await storage.readText();
+  if (!text) return [];
   const objects = rowsToObjects(parseCSV(text));
   return objects.map((o) => ({
     id: Number(o.id),
@@ -41,15 +33,17 @@ function readRaw() {
   }));
 }
 
-function writeRaw(records) {
-  fs.writeFileSync(CSV_PATH, toCSV(records, HEADERS));
+async function writeRaw(records) {
+  await storage.writeText(toCSV(records, HEADERS));
 }
 
 function nextId(records) {
   return records.reduce((max, r) => Math.max(max, r.id || 0), 0) + 1;
 }
 
-// Serializa leituras/escritas para evitar corrida entre requisições concorrentes.
+// Serializa leituras/escritas para evitar corrida entre requisições concorrentes
+// dentro da mesma instância do processo (não protege contra instâncias
+// serverless concorrentes distintas escrevendo ao mesmo tempo).
 let queue = Promise.resolve();
 function withLock(fn) {
   const result = queue.then(fn);
@@ -61,8 +55,8 @@ function withLock(fn) {
 }
 
 async function list({ search, cargo, classificacao } = {}) {
-  return withLock(() => {
-    let records = readRaw();
+  return withLock(async () => {
+    let records = await readRaw();
     if (cargo) {
       records = records.filter((r) => r.cargo.toLowerCase() === cargo.toLowerCase());
     }
@@ -80,13 +74,13 @@ async function list({ search, cargo, classificacao } = {}) {
 }
 
 async function create({ cargo, setor, classificacao_setor }) {
-  return withLock(() => {
+  return withLock(async () => {
     const trimmedCargo = (cargo || '').trim();
     const trimmedSetor = (setor || '').trim();
     if (!trimmedCargo && !trimmedSetor) {
       throw new ValidationError('Informe ao menos o cargo ou o setor.');
     }
-    const records = readRaw();
+    const records = await readRaw();
     const now = new Date().toISOString();
     const record = {
       id: nextId(records),
@@ -97,14 +91,14 @@ async function create({ cargo, setor, classificacao_setor }) {
       updated_at: now,
     };
     records.push(record);
-    writeRaw(records);
+    await writeRaw(records);
     return record;
   });
 }
 
 async function update(id, { cargo, setor, classificacao_setor }) {
-  return withLock(() => {
-    const records = readRaw();
+  return withLock(async () => {
+    const records = await readRaw();
     const idx = records.findIndex((r) => r.id === Number(id));
     if (idx === -1) throw new NotFoundError('Registro não encontrado.');
     const existing = records[idx];
@@ -124,26 +118,26 @@ async function update(id, { cargo, setor, classificacao_setor }) {
       updated_at: new Date().toISOString(),
     };
     records[idx] = updated;
-    writeRaw(records);
+    await writeRaw(records);
     return updated;
   });
 }
 
 async function remove(id) {
-  return withLock(() => {
-    const records = readRaw();
+  return withLock(async () => {
+    const records = await readRaw();
     const idx = records.findIndex((r) => r.id === Number(id));
     if (idx === -1) throw new NotFoundError('Registro não encontrado.');
     const [removed] = records.splice(idx, 1);
-    writeRaw(records);
+    await writeRaw(records);
     return removed;
   });
 }
 
 async function importCsv(text) {
-  return withLock(() => {
+  return withLock(async () => {
     const objects = rowsToObjects(parseCSV(text));
-    const records = readRaw();
+    const records = await readRaw();
     let id = nextId(records);
     const now = new Date().toISOString();
     let imported = 0;
@@ -167,21 +161,21 @@ async function importCsv(text) {
       });
       imported += 1;
     }
-    writeRaw(records);
+    await writeRaw(records);
     return { imported, skipped, total: records.length };
   });
 }
 
 async function exportCsv() {
-  return withLock(() => {
-    const records = readRaw().sort((a, b) => a.id - b.id);
+  return withLock(async () => {
+    const records = (await readRaw()).sort((a, b) => a.id - b.id);
     return toCSV(records, HEADERS);
   });
 }
 
 async function stats() {
-  return withLock(() => {
-    const records = readRaw();
+  return withLock(async () => {
+    const records = await readRaw();
     const result = {
       total: records.length,
       porCargo: {},
