@@ -5,9 +5,10 @@ Pedagogos e TAEs) por cargo, setor/unidade de trabalho e classificação do
 setor (Unidade Acadêmica, Unidade Administrativa ou Não sei). Ver
 `Documento de Visão` para o detalhamento completo do escopo.
 
-Suporta dois modos de hospedagem: auto-hospedado (Node.js + CSV local, como
-descrito no Documento de Visão) ou deploy na Vercel (Functions + Vercel
-Blob). Veja as seções abaixo.
+Auto-hospedado, com persistência em CSV local (como descrito no Documento
+de Visão). A forma recomendada de rodar é via Docker Compose, com um único
+comando. Também é possível rodar direto com Node.js, ou fazer deploy na
+Vercel — ver seções abaixo.
 
 ## Arquitetura
 
@@ -37,7 +38,32 @@ O projeto é um monorepo com [npm workspaces](https://docs.npmjs.com/cli/v10/usi
 └── vercel.json
 ```
 
-## Requisitos
+## Como rodar (Docker, recomendado)
+
+Requer apenas Docker com o plugin Compose instalado.
+
+```bash
+docker compose up -d
+```
+
+Isso builda a imagem (frontend + backend) e sobe a aplicação em
+`http://localhost:3001`. Os dados ficam em `server/data/servidores.csv` no
+próprio host (montado como volume no container), então persistem entre
+reinícios, rebuilds e atualizações da imagem.
+
+Para atualizar depois de alterar o código:
+
+```bash
+docker compose up -d --build
+```
+
+Para parar:
+
+```bash
+docker compose down
+```
+
+## Requisitos (rodando sem Docker)
 
 - Node.js 18 ou superior
 
@@ -63,7 +89,7 @@ npm run dev:client   # http://localhost:5173
 O Vite já está configurado para fazer proxy de `/api` para
 `http://localhost:3001`, então basta acessar `http://localhost:5173`.
 
-## Como rodar em produção auto-hospedada
+## Como rodar em produção sem Docker
 
 ```bash
 npm install
@@ -74,7 +100,12 @@ npm start --workspace server   # serve a API e o front compilado em http://local
 Os dados ficam persistidos em `server/data/servidores.csv`, criado
 automaticamente na primeira execução.
 
-## Deploy na Vercel
+## Deploy na Vercel (opcional, não usado atualmente)
+
+O suporte a deploy na Vercel continua no código (`api/`, `vercel.json`,
+`server/storage/vercelBlob.js`), mas não é a forma de hospedagem em uso —
+o projeto roda self-hosted via Docker (seção acima). Fica documentado aqui
+caso essa opção volte a ser útil no futuro.
 
 As Vercel Functions têm sistema de arquivos efêmero (não compartilhado entre
 instâncias e descartado a cada novo deploy), então o CSV local não funciona
@@ -126,6 +157,7 @@ id, cargo, setor, classificacao_setor, created_at, updated_at
 
 ## Backup
 
-- Auto-hospedado: copie o arquivo `server/data/servidores.csv`.
-- Vercel: use a exportação CSV da aplicação (`/api/records/export`, também
-  disponível pelo botão "Exportar CSV" na interface).
+Basta copiar o arquivo `server/data/servidores.csv` (mesmo caminho rodando
+via Docker ou diretamente com Node — no Docker é o arquivo no host, fora do
+container). Também dá para usar a exportação CSV da aplicação
+(`/api/records/export`, disponível pelo botão "Exportar CSV" na interface).
