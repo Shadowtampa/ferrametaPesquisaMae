@@ -82,13 +82,16 @@ async function list({ search, cargo, classificacao } = {}) {
 async function create({ cargo, setor, classificacao_setor }) {
   return withLock(() => {
     const trimmedCargo = (cargo || '').trim();
-    if (!trimmedCargo) throw new ValidationError('Cargo é obrigatório.');
+    const trimmedSetor = (setor || '').trim();
+    if (!trimmedCargo && !trimmedSetor) {
+      throw new ValidationError('Informe ao menos o cargo ou o setor.');
+    }
     const records = readRaw();
     const now = new Date().toISOString();
     const record = {
       id: nextId(records),
       cargo: trimmedCargo,
-      setor: (setor || '').trim(),
+      setor: trimmedSetor,
       classificacao_setor: normalizeClassificacao(classificacao_setor),
       created_at: now,
       updated_at: now,
@@ -106,11 +109,14 @@ async function update(id, { cargo, setor, classificacao_setor }) {
     if (idx === -1) throw new NotFoundError('Registro não encontrado.');
     const existing = records[idx];
     const newCargo = cargo !== undefined ? cargo.trim() : existing.cargo;
-    if (!newCargo) throw new ValidationError('Cargo é obrigatório.');
+    const newSetor = setor !== undefined ? setor.trim() : existing.setor;
+    if (!newCargo && !newSetor) {
+      throw new ValidationError('Informe ao menos o cargo ou o setor.');
+    }
     const updated = {
       ...existing,
       cargo: newCargo,
-      setor: setor !== undefined ? setor.trim() : existing.setor,
+      setor: newSetor,
       classificacao_setor:
         classificacao_setor !== undefined
           ? normalizeClassificacao(classificacao_setor)
@@ -147,7 +153,7 @@ async function importCsv(text) {
       const setor = (obj.setor || obj.Setor || obj['setor/unidade'] || '').trim();
       const classRaw =
         obj.classificacao_setor || obj.classificacao || obj['classificação'] || '';
-      if (!cargo) {
+      if (!cargo && !setor) {
         skipped += 1;
         continue;
       }
