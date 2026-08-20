@@ -1,0 +1,14 @@
+{
+  "name": "servidor-catalogo-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API do Catálogo de Servidores por Cargo e Setor (persistência em CSV).",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
